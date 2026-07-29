@@ -1,0 +1,76 @@
+version: "1.0"
+detectors:
+  - id: "aws_access_key"
+    capability: "cloud_infrastructure"
+    pattern: "(?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|AWS_DEFAULT_REGION)"
+    confidence: "high"
+
+  - id: "clerk_secret_key"
+    capability: "identity_auth"
+    pattern: "(?:CLERK_SECRET_KEY|sk_test_|sk_live_)"
+    confidence: "high"
+
+  - id: "clerk_publishable_key"
+    capability: "identity_auth"
+    pattern: "(?:CLERK_PUBLISHABLE_KEY|VITE_CLERK_PUBLISHABLE_KEY|pk_test_|pk_live_)"
+    confidence: "medium"
+
+  - id: "gcp_credentials"
+    capability: "cloud_infrastructure"
+    pattern: "(?:GOOGLE_APPLICATION_CREDENTIALS|GCP_SA_KEY|GCLOUD_PROJECT)"
+    confidence: "high"
+
+  - id: "azure_secret"
+    capability: "cloud_infrastructure"
+    pattern: "(?:AZURE_CLIENT_SECRET|AZURE_TENANT_ID|AZURE_CLIENT_ID|AZURE_STORAGE_KEY)"
+    confidence: "high"
+
+  - id: "openai_key"
+    capability: "ai_service"
+    pattern: "(?:OPENAI_API_KEY|OPENAI_SECRET|OPENAI_ORGANIZATION)"
+    confidence: "high"
+
+  - id: "anthropic_key"
+    capability: "ai_service"
+    pattern: "(?:ANTHROPIC_API_KEY|CLAUDE_API_KEY)"
+    confidence: "high"
+
+  - id: "stripe_key"
+    capability: "payment_gateway"
+    pattern: "(?:STRIPE_SECRET_KEY|STRIPE_PUBLISHABLE_KEY|STRIPE_WEBHOOK_SECRET)"
+    confidence: "high"
+
+  - id: "database_url"
+    capability: "database"
+    pattern: "(?:DATABASE_URL|MONGODB_URI|REDIS_URL|MYSQL_URL|POSTGRES_URL|DB_PASSWORD|\\bDB_USER\\b)"
+    confidence: "high"
+
+  - id: "jwt_secret"
+    capability: "identity_auth"
+    pattern: "(?:JWT_SECRET|JWT_PRIVATE_KEY|AUTH_SECRET|NEXTAUTH_SECRET|PASSPORT_SECRET)"
+    confidence: "high"
+
+  - id: "private_key_header"
+    capability: "private_key"
+    pattern: "(?:-----BEGIN RSA PRIVATE KEY-----|-----BEGIN PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----)"
+    confidence: "high"
+
+  - id: "github_token"
+    capability: "ci_cd"
+    pattern: "(?:GITHUB_TOKEN|GH_PAT|GITHUB_CLIENT_SECRET)"
+    confidence: "medium"
+
+  - id: "gitlab_token"
+    capability: "ci_cd"
+    pattern: "(?:GITLAB_TOKEN|GITLAB_PRIVATE_TOKEN)"
+    confidence: "medium"
+
+  - id: "smtp_credentials"
+    capability: "messaging"
+    pattern: "(?:SMTP_PASSWORD|SMTP_USER|MAIL_PASSWORD|SENDGRID_API_KEY)"
+    confidence: "medium"
+
+  - id: "integrations_webhook"
+    capability: "messaging"
+    pattern: "(?:SLACK_WEBHOOK_URL|DISCORD_WEBHOOK_URL|TWILIO_AUTH_TOKEN|SUPABASE_SERVICE_ROLE_KEY|FIREBASE_PRIVATE_KEY)"
+    confidence: "medium"

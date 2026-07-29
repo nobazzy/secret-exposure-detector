@@ -1,0 +1,56 @@
+version: "1.0"
+policies:
+  - id: "example_file_reduction"
+    condition: "filename_matches"
+    pattern: "\\.env\\.(?:example|sample|template)$"
+    score_modifier: -30
+    override_criticality: "BAIXO"
+    description: "Arquivos de exemplo não devem ser classificados como incidentes graves."
+
+  - id: "clerk_pk_test_reduction"
+    condition: "value_matches"
+    pattern: "^pk_test_"
+    score_modifier: -50
+    override_criticality: "BAIXO"
+    description: "Chave pública de testes do Clerk (pk_test_) feita para o frontend."
+
+  - id: "clerk_pk_live_reduction"
+    condition: "value_matches"
+    pattern: "^pk_live_"
+    score_modifier: -30
+    override_criticality: "MÉDIO"
+    description: "Chave pública de produção do Clerk (pk_live_)."
+
+  - id: "tsconfig_file_reduction"
+    condition: "filename_matches"
+    pattern: "tsconfig.*\\.json$"
+    score_modifier: -50
+    override_criticality: "BAIXO"
+    description: "Configurações do compilador TypeScript não são credenciais de nuvem."
+
+  - id: "lock_file_reduction"
+    condition: "filename_matches"
+    pattern: "(?:package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|Cargo\\.lock|composer\\.lock)$"
+    score_modifier: -50
+    override_criticality: "BAIXO"
+    description: "Arquivos de lock de dependências contêm apenas hashes de integridade públicos."
+
+  - id: "test_fixtures_reduction"
+    condition: "path_contains"
+    pattern: "/(?:tests?|fixtures|mocks|__tests__)/"
+    score_modifier: -20
+    description: "Desconto de risco para artefatos em pastas de testes ou mocks."
+
+  - id: "sri_integrity_hash_reduction"
+    condition: "value_matches"
+    pattern: "^sha(?:512|256|384)-"
+    score_modifier: -50
+    override_criticality: "BAIXO"
+    description: "Hashes de integridade de pacotes npm/yarn (Subresource Integrity)."
+
+  - id: "dummy_value_reduction"
+    condition: "value_matches"
+    pattern: "^(?:your_.*|changeme|123456|xxx|dummy.*|example.*|placeholder.*|todo.*|user_2y.*)$"
+    score_modifier: -40
+    override_criticality: "BAIXO"
+    description: "Valores obviamente falsos, dados fictícios (dummy) ou IDs públicos de usuários Clerk."

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Critical Secret Exposure Detector v4.1</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              bg: '#0a0d14',
+              card: '#121824',
+              border: '#1f293d'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <style>
+    body { background-color: #0a0d14; color: #f1f5f9; font-family: 'Inter', sans-serif; }
+    .glass-panel { background: rgba(18, 24, 36, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glow-critical { box-shadow: 0 0 20px -5px rgba(239, 68, 68, 0.3); }
+  </style>
+</head>
+<body class="bg-[#0a0d14] text-slate-100 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function App() {
+      const [jobs, setJobs] = useState([]);
+      const [selectedJob, setSelectedJob] = useState(null);
+      const selectedJobRef = useRef(null);
+      const [incidents, setIncidents] = useState([]);
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [newPath, setNewPath] = useState('');
+      const [runAi, setRunAi] = useState(false);
+      const [revealedIds, setRevealedIds] = useState(new Set());
+      const [copiedId, setCopiedId] = useState(null);
+      const [searchTerm, setSearchTerm] = useState('');
+      const [filterCrit, setFilterCrit] = useState('RELEVANT');
+      const [scanMode, setScanMode] = useState('SINGLE'); // 'SINGLE' or 'INDEXED'
+      const [indexedTag, setIndexedTag] = useState('');
+      const [indexedDep, setIndexedDep] = useState('');
+      const [indexedLang, setIndexedLang] = useState('');
+      const [indexedLimit, setIndexedLimit] = useState(5);
+      const [indexedError, setIndexedError] = useState('');
+
+      const updateSelectedJob = (job) => {
+        selectedJobRef.current = job;
+        setSelectedJob(job);
+      };
+
+      const handleStartIndexedScan = async (e) => {
+        e.preventDefault();
+        setIndexedError('');
+        try {
+          const body = { limit: indexedLimit };
+          if (indexedTag.trim()) body.tag = indexedTag.trim();
+          if (indexedDep.trim()) body.dependency = indexedDep.trim();
+          if (indexedLang.trim()) body.language = indexedLang.trim();
+
+          const res = await fetch('/api/scan-indexed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+
+          if (res.ok) {
+            setIsModalOpen(false);
+            fetchJobs();
+            setTimeout(fetchJobs, 3000);
+            setTimeout(fetchJobs, 8000);
+          } else {
+            const errData = await res.json();
+            setIndexedError(errData.detail || 'Erro ao iniciar scan integrado.');
+          }
+        } catch (e) {
+          setIndexedError('Erro de conexão com o servidor.');
+        }
+      };
+
+      const fetchJobs = async () => {
+        try {
+          const res = await fetch('/api/jobs');
+          if (res.ok) {
+            const data = await res.json();
+            setJobs(data);
+            if (data.length > 0 && !selectedJobRef.current) {
+              selectJob(data[0].id);
+            }
+          }
+        } catch (e) { console.error(e); }
+      };
+
+      const selectJob = async (id) => {
+        try {
+          const jRes = await fetch(`/api/jobs/${id}`);
+          if (jRes.ok) {
+            const jobData = await jRes.json();
+            updateSelectedJob(jobData);
+          }
+          const iRes = await fetch(`/api/jobs/${id}/incidents`);
+          if (iRes.ok) setIncidents(await iRes.json());
+        } catch (e) { console.error(e); }
+      };
+
+      useEffect(() => {
+        fetchJobs();
+        const interval = setInterval(fetchJobs, 3000);
+        return () => clearInterval(interval);
+      }, []);
+
+      const handleStartScan = async (e) => {
+        e.preventDefault();
+        if (!newPath.trim()) return;
+        try {
+          const res = await fetch('/api/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target_path: newPath.trim(), run_ai_enrichment: runAi })
+          });
+          if (res.ok) {
+            const newJob = await res.json();
+            setIsModalOpen(false);
+            setNewPath('');
+            fetchJobs();
+            const interval = setInterval(async () => {
+              const poll = await fetch(`/api/jobs/${newJob.id}`);
+              if (poll.ok) {
+                const updated = await poll.json();
+                if (updated.status === 'COMPLETED' || updated.status === 'FAILED') {
+                  clearInterval(interval);
+                  fetchJobs();
+                  selectJob(updated.id);
+                }
+              }
+            }, 1000);
+          }
+        } catch (e) { console.error(e); }
+      };
+
+      const toggleReveal = (id) => {
+        setRevealedIds(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) next.delete(id); else next.add(id);
+          return next;
+        });
+      };
+
+      const copySecret = (id, val) => {
+        if (!val) return;
+        navigator.clipboard.writeText(val);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
+      };
+
+      const maskVal = (val) => {
+        if (!val) return '—';
+        if (val.length <= 8) return '••••••••';
+        return val.substring(0, 4) + '••••••••' + val.substring(val.length - 4);
+      };
+
+      const isLow = (crit) => crit === 'LOW' || crit === 'BAIXO';
+      const isMedium = (crit) => crit === 'MEDIUM' || crit === 'MÉDIO' || crit === 'MEDIO';
+      const isHigh = (crit) => crit === 'HIGH' || crit === 'ALTO';
+      const isCritical = (crit) => crit === 'CRITICAL' || crit === 'CRÍTICO' || crit === 'CRITICO';
+
+      const filteredIncidents = incidents.filter(i => {
+        const matchesSearch = i.variable_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              i.relative_path.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              i.capability.toLowerCase().includes(searchTerm.toLowerCase());
+
+        let matchesCrit = true;
+        if (filterCrit === 'RELEVANT') {
+          matchesCrit = !isLow(i.criticality);
+        } else if (filterCrit === 'BAIXO' || filterCrit === 'LOW') {
+          matchesCrit = isLow(i.criticality);
+        } else if (filterCrit === 'MÉDIO' || filterCrit === 'MEDIUM') {
+          matchesCrit = isMedium(i.criticality);
+        } else if (filterCrit === 'ALTO' || filterCrit === 'HIGH') {
+          matchesCrit = isHigh(i.criticality);
+        } else if (filterCrit === 'CRÍTICO' || filterCrit === 'CRITICAL') {
+          matchesCrit = isCritical(i.criticality);
+        }
+
+        return matchesSearch && matchesCrit;
+      });
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* Navbar */}
+          <nav className="border-b border-slate-800 bg-[#0d121f]/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-blue-600 p-0.5 flex items-center justify-center glow-critical">
+                  <div className="w-full h-full bg-[#0a0d14] rounded-[10px] flex items-center justify-center font-bold text-red-400">🛡️</div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="font-bold text-lg text-white">SecretExposure</h1>
+                    <span className="px-2 py-0.5 text-[10px] font-mono font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full">v4.1 Enterprise</span>
+                  </div>
+                  <p className="text-xs text-slate-400 font-mono">Detector Estático & Auditor de Configurações</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={fetchJobs} className="p-2.5 rounded-xl border border-slate-800 bg-slate-900/50 text-slate-300 hover:text-white text-xs font-mono">🔄 Atualizar</button>
+                <button onClick={() => setIsModalOpen(true)} className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium text-xs flex items-center gap-2 shadow-lg shadow-blue-500/20">➕ Nova Varredura</button>
+              </div>
+            </div>
+          </nav>
+
+          <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+            {/* Session Selector */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 glass-panel p-4 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">📜</span>
+                <div>
+                  <span className="text-xs font-mono text-slate-400 block">Sessão de Varredura</span>
+                  <select
+                    value={selectedJob?.id || ''}
+                    onChange={(e) => selectJob(e.target.value)}
+                    className="bg-[#0a0d14] border border-slate-800 text-sm font-mono text-slate-200 rounded-xl px-3 py-1.5 focus:outline-none"
+                  >
+                    {jobs.length === 0 ? <option value="">Nenhuma varredura registrada</option> : jobs.map(j => (
+                      <option key={j.id} value={j.id}>Job #{j.id} — {j.target_path} ({j.status})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {selectedJob && (
+                <div className="flex items-center gap-4 text-xs font-mono text-slate-400">
+                  <div>Status: <span className="text-emerald-400 font-bold">{selectedJob.status}</span></div>
+                  <div>Executado em: <span className="text-slate-300">{new Date(selectedJob.created_at).toLocaleString()}</span></div>
+                </div>
+              )}
+            </div>
+
+            {selectedJob ? (
+              <>
+                {/* Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                  <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-red-500">
+                    <div className="text-xs font-mono text-slate-400 font-semibold uppercase">Críticos</div>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <span className="text-3xl font-bold font-mono text-white">{selectedJob.critical_count}</span>
+                      <span className="text-xs text-red-400 font-mono">🔴 Imediato</span>
+                    </div>
+                  </div>
+
+                  <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-orange-500">
+                    <div className="text-xs font-mono text-slate-400 font-semibold uppercase">Altos</div>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <span className="text-3xl font-bold font-mono text-white">{selectedJob.high_count}</span>
+                      <span className="text-xs text-orange-400 font-mono">🟠 Atenção</span>
+                    </div>
+                  </div>
+
+                  <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-yellow-500">
+                    <div className="text-xs font-mono text-slate-400 font-semibold uppercase">Médios</div>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <span className="text-3xl font-bold font-mono text-white">{selectedJob.medium_count}</span>
+                      <span className="text-xs text-yellow-400 font-mono">🟡 Dev/Configs</span>
+                    </div>
+                  </div>
+
+                  <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-blue-500">
+                    <div className="text-xs font-mono text-slate-400 font-semibold uppercase">Arquivos Analisados</div>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <span className="text-3xl font-bold font-mono text-white">{selectedJob.analyzed_files}</span>
+                      <span className="text-xs text-blue-400 font-mono">({selectedJob.cached_files} cache)</span>
+                    </div>
+                  </div>
+
+                  <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-emerald-500">
+                    <div className="text-xs font-mono text-slate-400 font-semibold uppercase">Throughput</div>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <span className="text-2xl font-bold font-mono text-white">{selectedJob.throughput_files_per_sec.toFixed(1)}</span>
+                      <span className="text-xs text-emerald-400 font-mono">arq/s</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Summary */}
+                {selectedJob.ai_summary && (
+                  <div className="glass-panel rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/20 to-blue-950/20 p-6 mb-8">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-bold text-base text-white">🤖 Análise do Assistente de IA (Ollama)</h3>
+                    </div>
+                    <div className="text-xs text-slate-300 font-mono whitespace-pre-line leading-relaxed border-t border-indigo-500/10 pt-3">
+                      {selectedJob.ai_summary}
+                    </div>
+                  </div>
+                )}
+
+                {/* Table */}
+                <div className="glass-panel rounded-2xl border border-slate-800 p-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                    <div>
+                      <h3 className="font-bold text-base text-white">Incidentes Exibidos ({filteredIncidents.length})</h3>
+                      <p className="text-xs text-slate-400">Filtre por criticidade ou visualize apenas alertas relevantes</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <a href={`/api/jobs/${selectedJob.id}/export/sarif`} target="_blank" className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-slate-300">📥 SARIF</a>
+                      <a href={`/api/jobs/${selectedJob.id}/export/json`} target="_blank" className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-slate-300">📥 JSON</a>
+                      <a href={`/api/jobs/${selectedJob.id}/export/csv`} target="_blank" className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-slate-300">📥 CSV</a>
+                      <a href={`/api/jobs/${selectedJob.id}/export/markdown`} target="_blank" className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-slate-300">📥 Markdown</a>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3 mb-6">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Buscar por variável, arquivo ou capacidade..."
+                      className="w-full bg-[#0a0d14] border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-200 font-mono"
+                    />
+                    <div className="flex items-center gap-1 bg-[#0a0d14] border border-slate-800 rounded-xl p-1 shrink-0">
+                      {[
+                        { id: 'RELEVANT', label: '🔥 Relevantes' },
+                        { id: 'CRÍTICO', label: 'CRÍTICO' },
+                        { id: 'ALTO', label: 'ALTO' },
+                        { id: 'MÉDIO', label: 'MÉDIO' },
+                        { id: 'BAIXO', label: 'BAIXO' },
+                        { id: 'ALL', label: 'TODOS' }
+                      ].map(item => (
+                        <button
+                          key={item.id}
+                          onClick={() => setFilterCrit(item.id)}
+                          className={`px-3 py-1 text-xs font-mono rounded-lg transition ${
+                            filterCrit === item.id ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-slate-900/40 text-[11px] font-mono text-slate-400 uppercase">
+                          <th className="py-3 px-4">Criticidade</th>
+                          <th className="py-3 px-4">Variável</th>
+                          <th className="py-3 px-4">Valor Capturado (Local)</th>
+                          <th className="py-3 px-4">Arquivo & Linha</th>
+                          <th className="py-3 px-4">Capacidade</th>
+                          <th className="py-3 px-4 text-right">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50 text-xs font-mono">
+                        {filteredIncidents.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-8 text-center text-slate-500">
+                              Nenhum incidente encontrado nos filtros selecionados.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredIncidents.map(inc => {
+                            const isRev = revealedIds.has(inc.id);
+                            return (
+                              <tr key={inc.id} className="hover:bg-slate-900/40">
+                                <td className="py-3 px-4">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    isCritical(inc.criticality) ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                                    isHigh(inc.criticality) ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
+                                    isMedium(inc.criticality) ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                                    'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  }`}>
+                                    {inc.criticality}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 font-semibold text-slate-200">{inc.variable_name}</td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="bg-[#0a0d14] px-2 py-1 rounded border border-slate-800 text-slate-300">
+                                      {isRev ? inc.secret_value : maskVal(inc.secret_value)}
+                                    </span>
+                                    {inc.secret_value && (
+                                      <>
+                                        <button onClick={() => toggleReveal(inc.id)} className="p-1 text-slate-400 hover:text-white" title="Revelar/Ocultar">
+                                          {isRev ? '🙈' : '👁️'}
+                                        </button>
+                                        <button onClick={() => copySecret(inc.id, inc.secret_value)} className="p-1 text-slate-400 hover:text-white" title="Copiar">
+                                          {copiedId === inc.id ? '✅' : '📋'}
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-slate-300">{inc.relative_path} <span className="text-blue-400">:L{inc.line_number}</span></td>
+                                <td className="py-3 px-4 text-slate-400">{inc.capability}</td>
+                                <td className="py-3 px-4 text-right font-bold text-slate-200">{inc.risk_score}</td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="glass-panel rounded-2xl border border-slate-800 p-12 text-center my-8">
+                <div className="text-4xl mb-3">🛡️</div>
+                <h3 className="font-bold text-lg text-white mb-1">Nenhum repositório selecionado</h3>
+                <p className="text-xs text-slate-400 font-mono mb-6">Selecione uma sessão existente no menu acima ou inicie uma nova varredura.</p>
+                <button onClick={() => setIsModalOpen(true)} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs font-medium inline-flex items-center gap-2 shadow-lg shadow-blue-500/20">
+                  ➕ Nova Varredura
+                </button>
+              </div>
+            )}
+          </main>
+
+          {/* Modal */}
+          {isModalOpen && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="glass-panel w-full max-w-lg rounded-2xl border border-slate-800 p-6 relative">
+                <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">✕</button>
+                
+                {/* Modal Tab Headers */}
+                <div className="flex items-center gap-2 mb-6 border-b border-slate-800 pb-3">
+                  <button
+                    onClick={() => setScanMode('SINGLE')}
+                    className={`px-3 py-1.5 text-xs font-mono rounded-lg transition ${
+                      scanMode === 'SINGLE' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    📂 Varredura Única (Local / Git)
+                  </button>
+                  <button
+                    onClick={() => setScanMode('INDEXED')}
+                    className={`px-3 py-1.5 text-xs font-mono rounded-lg transition ${
+                      scanMode === 'INDEXED' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    🔍 Busca Integrada (Indexer)
+                  </button>
+                </div>
+
+                {scanMode === 'SINGLE' ? (
+                  <form onSubmit={handleStartScan} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-mono text-slate-300 mb-1">Caminho da Pasta ou URL do GitHub</label>
+                      <input
+                        type="text"
+                        value={newPath}
+                        onChange={(e) => setNewPath(e.target.value)}
+                        placeholder="Ex: C:\Users\vasco\meu-projeto ou https://github.com/user/repo.git"
+                        required
+                        className="w-full bg-[#0a0d14] border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 font-mono"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="ai"
+                        checked={runAi}
+                        onChange={(e) => setRunAi(e.target.checked)}
+                        className="rounded border-slate-800 bg-[#0a0d14]"
+                      />
+                      <label htmlFor="ai" className="text-xs text-slate-300 font-mono">Enriquecimento por IA (Ollama)</label>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs text-slate-400">Cancelar</button>
+                      <button type="submit" className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-medium">Iniciar Varredura</button>
+                    </div>
+                  </form>
+                ) : (
+                  <form onSubmit={handleStartIndexedScan} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-mono text-slate-300 mb-1">Tag / Categoria (ex: SaaS, Stripe, Next.js)</label>
+                      <input
+                        type="text"
+                        value={indexedTag}
+                        onChange={(e) => setIndexedTag(e.target.value)}
+                        placeholder="Ex: SaaS"
+                        className="w-full bg-[#0a0d14] border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-100 font-mono"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-mono text-slate-300 mb-1">Dependência (ex: stripe)</label>
+                        <input
+                          type="text"
+                          value={indexedDep}
+                          onChange={(e) => setIndexedDep(e.target.value)}
+                          placeholder="Ex: stripe"
+                          className="w-full bg-[#0a0d14] border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-100 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-mono text-slate-300 mb-1">Linguagem (ex: typescript)</label>
+                        <input
+                          type="text"
+                          value={indexedLang}
+                          onChange={(e) => setIndexedLang(e.target.value)}
+                          placeholder="Ex: typescript"
+                          className="w-full bg-[#0a0d14] border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-100 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-mono text-slate-300 mb-1">Limite de Repositórios para Analisar</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={indexedLimit}
+                        onChange={(e) => setIndexedLimit(parseInt(e.target.value) || 5)}
+                        className="w-full bg-[#0a0d14] border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-100 font-mono"
+                      />
+                    </div>
+
+                    {indexedError && (
+                      <div className="text-xs font-mono text-red-400 bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl">
+                        ⚠️ {indexedError}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs text-slate-400">Cancelar</button>
+                      <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-medium flex items-center gap-2">
+                        🚀 Buscar no Indexer & Escanear Lote
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

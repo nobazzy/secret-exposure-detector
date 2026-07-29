@@ -1,0 +1,41 @@
+version: "1.0"
+capabilities:
+  cloud_infrastructure:
+    name: "Infraestrutura em Nuvem"
+    weight: 50
+    description: "Credenciais de acesso a provedores como AWS, Azure e GCP."
+  
+  private_key:
+    name: "Chave Privada & Certificado"
+    weight: 50
+    description: "Chaves de criptografia, pares RSA, certificados SSL/SSH."
+  
+  identity_auth:
+    name: "Autenticação & Tokens Admin"
+    weight: 45
+    description: "Tokens JWT, admin, OAuth secrets e chaves de sessão."
+  
+  payment_gateway:
+    name: "Gateway de Pagamento"
+    weight: 40
+    description: "Chaves secretas de Stripe, PayPal, Pagar.me, Mercado Pago."
+  
+  ai_service:
+    name: "Serviço de Inteligência Artificial"
+    weight: 35
+    description: "API keys para OpenAI, Anthropic, Gemini, Cohere."
+  
+  database:
+    name: "Banco de Dados & Datastore"
+    weight: 30
+    description: "String de conexão para PostgreSQL, MongoDB, Redis, MySQL."
+  
+  ci_cd:
+    name: "Ferramentas de CI/CD & Automação"
+    weight: 25
+    description: "Tokens de GitHub, GitLab, CircleCI, Jenkins."
+  
+  messaging:
+    name: "Mensageria & Integrações"
+    weight: 20
+    description: "Webhooks de Slack, Discord, credenciais Twilio, Sendgrid."

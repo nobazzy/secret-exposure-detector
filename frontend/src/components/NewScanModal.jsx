@@ -44,7 +44,7 @@ export default function NewScanModal({ isOpen, onClose, onSubmit }) {
               type="text"
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              placeholder="Ex: C:\Users\vasco\meu-projeto ou /home/user/repo"
+              placeholder="Ex: C:\projects\meu-projeto ou /home/user/repo"
               required
               className="w-full bg-[#0a0d14] border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
             />

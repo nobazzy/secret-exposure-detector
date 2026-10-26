@@ -5,9 +5,9 @@ import sys
 import uuid
 from pathlib import Path
 
-# Add paths to sys.path
-detector_dir = Path(r"C:\Users\vasco\.gemini\antigravity\scratch\secret-exposure-detector")
-indexer_dir = Path(r"C:\Users\vasco\.gemini\antigravity\scratch\github_repository_intelligence")
+# Add paths dynamically to sys.path
+detector_dir = Path(__file__).resolve().parent
+indexer_dir = detector_dir.parent / "github_repository_intelligence"
 
 sys.path.insert(0, str(detector_dir))
 sys.path.insert(0, str(indexer_dir))
